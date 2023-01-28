@@ -1,0 +1,9 @@
+(* 1 : A -> B : < A, {Na}pk (Ka) >
+2 : B -> A: < A, {Nb}pk (Kb) >
+3 : A -> S: < A, <B, {h (< Na, Nb >)} sk(Kbs) >>
+4 : S -> B: {<A, <h (< Na, Nb>), Ns>>}sk(kas)
+5 : B -> A: {<B, <h (<Na, Nb>), Ns>>} sk(Kas)
+6 : A -> S: < B, {<A, <h(<Na, Nb>), <Ns, k>>}sk(Kbs)>
+7 : S -> B: {k}sk(Kbs)
+8 : B -> A: {kabs}sk(k)
+9 : A -> B: {Nb}sk(Kabs) *)

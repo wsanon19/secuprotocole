@@ -1,0 +1,112 @@
+free Eve : identity.
+
+event alice_is(identity).
+event bob_is(identity).
+
+(******************* QUERIES **********************)
+
+(* 1. Secrecy properties: *)
+(*    - Eve can only know her public and private keys. *)
+lemma i : identity; attacker(pub(i)) phase 0 ==> i = Eve.
+lemma i : identity; attacker(sec(i)) phase 0 ==> i = Eve.
+(*    - Eve does not have any way to read data encrypted by the server. *)
+lemma i, s : identity; attacker(sskey(i, s)) phase 0 ==> i = Eve.
+(*    - Eve can only know the shared secret key K if she is either Alice or Bob at some point… *)
+query a, b : identity; 
+  let k = new K in
+  attacker(k) phase 0 ==> event(holds_secret(a, b, k)) && (a = Eve || b = Eve).
+
+(* 2. Forward secrecy properties: *)
+
+(* 3. Authentication properties: *)
+(*    - Whenever Bob receives a public key, it necessarily came from the server. *)
+query a, b : identity, k : symkey; event(bob_received(a, b, k)) ==> event(server_sent_key(b, k)).
+(*    - Every public key that Bob received comes from a unique server message everytime.
+        This is merely the injective variant of the property just above. *)
+query a, b : identity, k : symkey; inj-event(bob_received(a, b, k)) ==> inj-event(server_sent_key(b, k)).
+(*    - If Alice receives the public key belonging to Bob, then Bob sent it to the server before. *)
+query a, a', b : identity, k : symkey; event(bob_received(a', b, k)) 
+                                   ==> a' = Eve || (event(alice_start(a, b)) && event(alice_sent(a, b, k)) && a = a').
+(*    - If Alice receives the public key belonging to Bob, then Bob sent it to the server before in THIS EXACT session. *)
+query a, a', b : identity, k : symkey; inj-event(bob_received(a', b, k)) 
+                                   ==> a' = Eve || (inj-event(alice_start(a, b)) && inj-event(alice_sent(a, b, k)) && a = a').
+(*    - Weak authentication: if Bob ends a protocol run with Alice, then Alice started the run. *)
+query a, a', b : identity, k : symkey; event(bob_end(a', b, k)) ==> a' = Eve || (event(alice_start(a, b)) && a = a').
+(*    - Weak injective authentication: if Bob ends a protocol run with Alice, there is only a 
+        single Alice who started a run with Bob. *)
+query a, a', b : identity, k : symkey; inj-event(bob_end(a', b, k)) ==> a' = Eve || (inj-event(alice_start(a, b)) && a = a').
+
+lemma a, b : identity, k : symkey; event(bob_end(a, b, k)) ==> event(bob_received(a, b, k)).
+lemma a, a', b : identity, k : symkey; event(bob_end(a', b, k)) ==> a' = Eve || (event(alice_sent(a, b, k)) && a = a').
+(*    - Strong authentication: if Bob ends a protocol run with Alice, thinking he got K from Alice, then Alice effectively
+        started a protocol run with Bob during which she sent K to Bob. *)
+query a, a', b : identity, k : symkey; event(bob_end(a', b, k)) ==> a' = Eve || (event(alice_start(a, b)) && event(alice_sent(a, b, k)) && a = a').
+
+query a, b : identity, k : symkey; inj-event(bob_end(a, b, k)) ==> inj-event(bob_received(a, b, k)).
+
+query a, a', b : identity, k : symkey; inj-event(bob_end(a', b, k)) ==> a' = Eve || (inj-event(alice_sent(a, b, k)) && a = a').
+(*    - Strong injective authentication: if Bob ends a protocol run with Alice, thinking he got K from Alice, then Alice 
+        effectively started a protocol run with Bob during which she sent K to Bob.
+        Note that each instance of Bob starts a single run with a single Alice at a time. *)
+query a, a', b : identity, k : symkey; inj-event(bob_end(a', b, k)) ==> a' = Eve || (inj-event(alice_start(a, b)) && a = a').
+
+(* 4. Correctness properties: *)
+(*    - Bob can only end a protocol run if Alice started one earlier. *)
+query a, a', b : identity, t, t' : time, k : symkey; event(bob_end(a', b, k))@t ==> a' = Eve || (event(alice_start(a, b))@t' && t' < t && a = a').
+(*    - Every protocol end by Alice is accompanied by a protocol start by Bob.
+        This is just a stronger property than the one above. *)
+query a, a', b : identity, t, t' : time, k : symkey; inj-event(bob_end(a', b, k))@t ==> a' = Eve || (inj-event(alice_start(a, b))@t' && t' < t && a = a').
+(*    - Alice can only end a protocol run if she once sent a key to Bob earlier. *)
+query a, a', b : identity, k : symkey; inj-event(alice_end(a, b, k)) ==> inj-event(alice_sent(a, b, k)).
+(*    - Integrity: if Alice sent K, then Bob received K. *)
+query a, a', b : identity, k : symkey; event(bob_received(a', b, k)) ==> a' = Eve || (event(alice_sent(a, b, k)) && a = a').
+(*    - If Bob received a key from the network, they he necessarily started a protocol run once for each key received. *)
+query a, a', b : identity, k : symkey; inj-event(bob_received(a', b, k)) ==> a' = Eve || (inj-event(alice_start(a, b)) && a = a').
+(*    - Strong integrity: if Alice sent K, then Bob received K only once (messages are not replayed by Eve). *)
+query a, a', b : identity, k : symkey; inj-event(bob_received(a', b, k)) ==> a' = Eve || (inj-event(alice_sent(a, b, k)) && a = a').
+
+(* 5. A few other properties to confirm that this protocol can be executed: *)
+(*    - FALSE if event is reachable; TRUE otherwise. Hence must be FALSE. *)
+query a, b : identity; event(alice_start(a, b)).
+query a, b : identity, k : symkey; event(alice_end(a, b, k)).
+query a, b : identity, k : symkey; event(bob_end(a, b, k)).
+
+(******************* INITIALIZERS *********************)
+
+channel init.
+
+let INIT_ALICE(a : identity, b : identity, s : identity) =
+  if a <> Eve then
+  event alice_is(a);
+  ALICE(a, b, s).
+
+let INIT_BOB(b : identity, s : identity) =
+  if b <> Eve then
+  event bob_is(b);
+  BOB(b, s).
+
+let INIT_SERVER(a : identity, b : identity, s : identity) =
+  SERVER(a, b, s).
+
+let INIT_EVE(s : identity) =
+  out(init, sskey(Eve, s));
+  out(init, sec(Eve));
+  out(init, pub(Eve)).
+
+let MAKE_EVE_KNOW(a : identity, b : identity, s : identity) =
+    (phase 1; out(init, sskey(Eve, s)))
+  | (phase 2; out(init, sskey(a, s)))
+  | (phase 3; out(init, sskey(b, s))).
+
+let HONEST_PROCESSES(s : identity) =
+  in(init, (a : identity, b : identity));
+    !INIT_ALICE(a, b, s) 
+  | !INIT_BOB(b, s) 
+  | !INIT_SERVER(a, b, s)
+  | MAKE_EVE_KNOW(a, b, s).
+
+process 
+  in(init, s : identity);
+  (* The server S is trusted and can only be a honest process. *)
+  if s <> Eve then
+  !HONEST_PROCESSES(s) | INIT_EVE(s)

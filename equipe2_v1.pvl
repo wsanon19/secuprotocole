@@ -1,0 +1,6 @@
+(* 1. A → S : <A, {<Na, B>}Kas>
+2. S → B : <S, {<A, Na, Kab>}Kbs>
+3. S → A : {<Kab, Na>}Kas
+4. A → B : {{Na}Kpub(B)}Kab
+5. B → A : {{Na}Kpub(A)}Kab *)
+

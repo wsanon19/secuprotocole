@@ -1,0 +1,115 @@
+(* Description of the protocol:
+
+		1. A → S : ⟨A, {⟨B, K⟩}ˢₖ₍ₐₛ₎⟩
+
+    2. S → B : ⟨S, {⟨A, B, K⟩}ˢₖ₍ₚₛ₎⟩
+
+    3. B → A : ⟨B, {N}ˢₖ⟩
+
+    4. A → B : ⟨A, N⟩
+*)
+
+(************************* DEFINITIONS *********************************)
+
+(* A unique piece of data identifying who you really are. *)
+type identity.
+
+(* The types of key pairs used for asymmetric encryption. *)
+type pubkey.
+type seckey.
+(* Functions used to access public and private keys, which are unforgeable. *)
+fun pub(identity) : pubkey [private].
+fun sec(identity) : seckey [private].
+(* For the sake of type conversion, so that we can identify a public key as an arbitrary sequence of bits. *)
+fun rawpubkey(pubkey) : bitstring [data].
+(* Encryption and decryption using public and private keys. *)
+fun aenc(bitstring, pubkey) : bitstring.
+fun adec(bitstring, seckey) : bitstring
+  reduc forall m : bitstring, i : identity; adec(aenc(m, pub(i)), sec(i)) = m.
+
+(* The type of key used for symmetric encryption. *)
+type symkey.
+fun rawsymkey(symkey) : bitstring [data].
+(* Encryption and decryption using symmetric keys. *)
+fun senc(bitstring, symkey) : bitstring.
+fun sdec(bitstring, symkey) : bitstring 
+  reduc forall m : bitstring, k : symkey; sdec(senc(m, k), k) = m.
+
+(* Hypothesis: assume that any honest peer knows about a private symmetric key to talk to the server. *)
+fun sskey(identity, identity) : symkey [private].
+
+(* This function represents an arbitrary hash function, to be specified somewhere during implementation.
+   It is left abstract here because we don't really care, although we assume that it is perfect,
+   meaning that h(A) = h(B) iff A = B. *)
+fun h(bitstring) : bitstring.
+
+(* The abstract type of nonces, otherwise known as random bitstrings. *)
+type nonce.
+
+(************************** EVENTS *****************************)
+
+(* Triggered when a protocol run started (after a very simple handshake). *)
+event alice_start(identity, identity).
+(* Triggered when Alice ended a protocol run. *)
+event alice_end(identity, identity, symkey).
+(* Triggered when Bob ended a protocol run. *)
+event bob_end(identity, identity, symkey).
+(* Triggered when Alice sent a key onto the network. *)
+event alice_sent(identity, identity, symkey).
+(* Triggered when Bob received a key he can decrypt from the network. *)
+event bob_received(identity, identity, symkey).
+(* Triggered when the server relays the public key of Bob to Alice. *)
+event server_sent_pubkey(identity, pubkey).
+(* Triggered when Alice receives the public key from the server. *)
+event alice_received_pubkey(pubkey).
+(* Triggered when Bob sent his public key to the server. *)
+event bob_sent_pubkey(pubkey).
+
+event holds_secret(identity, identity, symkey).
+
+event server_sent_key(identity, symkey).
+
+(************************** COMMON STUFF *****************************)
+
+(* The network onto which Alice and Bob want to talk secretly. *)
+channel network.
+
+(*************************** PEERS ********************************)
+
+let ALICE(a : identity, b : identity, s : identity) =
+  event alice_start(a, b);
+  let K_AS = sskey(a, s) in 
+  new K : symkey;
+  event holds_secret(a, b, K);
+  event alice_sent(a, b, K);
+  out(network, (a, senc((b, K), K_AS)));
+
+  in(network, (=b, n_senc : bitstring));
+  let N : bitstring = sdec(n_senc, K) in 
+  out(network, (a, N));
+
+  event alice_end(a, b, K);
+  0.
+
+let BOB(b : identity, s : identity) =
+  let K_BS = sskey(b, s) in
+  in(network, (=s, a_b_k_senc : bitstring));
+  let (a : identity, =b, K : symkey) = sdec(a_b_k_senc, K_BS) in
+  event bob_received(a, b, K);
+  new N : bitstring;
+  out(network, (b, senc(N, K)));
+
+  in(network, (=a, =N));
+  event bob_end(a, b, K);
+  0.
+
+let SERVER(a : identity, b : identity, s : identity) =
+  let K_AS = sskey(a, s) in 
+  let K_BS = sskey(b, s) in
+  if a <> b then (* why not? *)
+  in(network, (=a, b_k_senc : bitstring));
+  let (=b, K : symkey) = sdec(b_k_senc, K_AS) in 
+  event server_sent_key(b, K);
+  out(network, (s, senc((a, b, K), K_BS)));
+
+  0.

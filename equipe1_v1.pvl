@@ -1,0 +1,5 @@
+(* A → S : {⟨A,B⟩}sKsa
+S → A : {⟨B,Ksab⟩}sKsa
+S → B : {⟨A,Ksab⟩}sKsb
+A → B : {⟨Na, A,Kab⟩}sKsab
+B → A : {Na}sKab *)

@@ -1,0 +1,53 @@
+free Eve : identity.
+
+(* 5. A few other properties to confirm that this protocol can be executed: *)
+(*    - FALSE if event is reachable; TRUE otherwise. Hence must be FALSE. *)
+query a, b : identity; event(alice_start(a, b)).
+query a, b : identity; event(alice_end(a, b)).
+query a, b : identity; event(bob_end(a, b)).
+
+(* query a, b : identity; let kab = new Kab in attacker(kab) ==> event (holds_secret(kab, a, b)) || a = Eve || b = Eve . *)
+
+(* Authenticite *)
+(* faible *)
+(* query a, b :identity;  event(bob_end(a, b)) ==> event(alice_start(a, b)) . *)
+(* query a, b :identity;  event(alice_end(a, b)) ==> event(alice_start(a, b)) && event(bob_end(a, b)) . *)
+
+(******************* INITIALIZERS *********************)
+
+channel init.
+
+let INIT_ALICE(a : identity, b : identity, s : identity) =
+  if a <> Eve then (* FIXME: we'll probably remove them later *)
+  (* event alice_is(a); *)
+  ALICE(a, b, s).
+
+let INIT_BOB(b : identity, s : identity) =
+  if b <> Eve then (* FIXME: we'll probably remove them later *)
+  (* event bob_is(b); *)
+  BOB(b, s).
+
+let INIT_SERVER(a : identity, b : identity, s : identity) =
+  SERVER(a, b, s).
+
+let INIT_EVE =
+  out(init, sec(Eve));
+  out(init, pub(Eve)).
+
+let MAKE_EVE_KNOW(a : identity, b : identity, s : identity) =
+    out(init, sskey(Eve, s))
+  | (phase 2; out(init, sskey(a, s)))
+  | (phase 3; out(init, sskey(b, s))).
+
+let HONEST_PROCESSES(s : identity) =
+  in(init, (a : identity, b : identity));
+    !INIT_ALICE(a, b, s) 
+  | !INIT_BOB(b, s) 
+  | !INIT_SERVER(a, b, s)
+  | MAKE_EVE_KNOW(a, b, s).
+
+process 
+  in(init, s : identity);
+  (* The server S is trusted and can only be a honest process. *)
+  if s <> Eve then
+  !HONEST_PROCESSES(s) | INIT_EVE

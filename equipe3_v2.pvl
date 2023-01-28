@@ -1,0 +1,80 @@
+(* 1 : A → B : < A, {Na}pk (Kb) >
+2 : B → A: < B, {Nb}pk (Ka) >
+3 : A → S: < A, <B, {h (< Na, Nb >)} sk(Kas) >>
+4 : S → B: {<A, <h (< Na, Nb>), Ns>>}sk(kbs)
+5 : B → A: {<B, <h (<Na, Nb>), Ns>>} pk(Ka)
+6 : A → S: < B, {<A, <h(<Na, Nb>), <Ns, k>>}sk(Kas)>
+7 : S → B: {k}sk(Kbs)
+8 : B → A: {kabs}sk(k)
+9 : A → B: {Nb}sk(Kabs) *)
+
+(************************* DEFINITIONS *********************************)
+
+(* A unique piece of data identifying who you really are. *)
+type identity.
+
+(* The types of key pairs used for asymmetric encryption. *)
+type pubkey.
+type seckey.
+(* Functions used to access public and private keys, which are unforgeable. *)
+fun pub(identity) : pubkey [private].
+fun sec(identity) : seckey [private].
+(* For the sake of type conversion, so that we can identify a public key as an arbitrary sequence of bits. *)
+fun rawpubkey(pubkey) : bitstring [data].
+(* Encryption and decryption using public and private keys. *)
+fun aenc(bitstring, pubkey) : bitstring.
+fun adec(bitstring, seckey) : bitstring
+  reduc forall m : bitstring, i : identity; adec(aenc(m, pub(i)), sec(i)) = m.
+
+(* The type of key used for symmetric encryption. *)
+type symkey.
+fun rawsymkey(symkey) : bitstring [data].
+(* Encryption and decryption using symmetric keys. *)
+fun senc(bitstring, symkey) : bitstring.
+fun sdec(bitstring, symkey) : bitstring 
+  reduc forall m : bitstring, k : symkey; sdec(senc(m, k), k) = m.
+
+(* Hypothesis: assume that any honest peer knows about a private symmetric key to talk to the server. *)
+fun sskey(identity, identity) : symkey [private].
+
+(* This function represents an arbitrary hash function, to be specified somewhere during implementation.
+   It is left abstract here because we don't really care, although we assume that it is perfect,
+   meaning that h(A) = h(B) iff A = B. *)
+fun h(bitstring) : bitstring.
+
+(* The abstract type of nonces, otherwise known as random bitstrings. *)
+type nonce.
+
+
+(************************** COMMON STUFF *****************************)
+
+(* The network onto which Alice and Bob want to talk secretly. *)
+channel network.
+
+(*************************** PEERS ********************************)
+
+let ALICE(a : identity, b : identity, s : identity) =
+    new Na :bitstring;
+    out(network, (a, aenc(Na, pub(b))));
+
+    in (network, (i:bitstring, N_b:bitstring));
+    let Nb = adec(N_b, sec(a))in
+
+    let Kas = sskey(a, s) in
+    out (network, (a, (i, senc(h((Na,Nb)),Kas))));
+
+    in(network, mess:bitstring );
+    let (j, (h_Na_Nb:bitstring , N_s:bitstring) ) = adec( mess, sec(a)) in
+    
+    new k = sskey(a,b);
+    out (network, (j, senc( (a, (h_Na_Nb, (N_s, k ))) ,Kas )));
+
+    in(network, Kab_enc:bitstring);
+    let Kab = sdec(Kab_enc,k) in 
+    
+    out(senc(Nb, Kab));
+
+
+
+
+
